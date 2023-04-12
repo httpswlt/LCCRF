@@ -15,7 +15,7 @@ class expATLoss():
     def forward(self, anc, pos, neg):
         cos_pos = F.cosine_similarity(anc, pos)
         cos_neg = F.relu(F.cosine_similarity(anc, neg))
-        y_true = anc.new().resize_as_(anc).fill_(1)[:,0:1]
+        y_true = anc.new().resize_as_(anc).fill_(1)[:,0:1].squeeze()
         return torch.exp(self.marginloss(cos_pos, cos_neg.float(), y_true)) # max(0, -1*(cos_pos - cos_neg))
 
 

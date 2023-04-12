@@ -5,8 +5,9 @@ YE, Hanrong et al, Bi-directional Exponential Angular Triplet Loss for RGB-Infra
 
 import settings
 import os
-os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   
-os.environ["CUDA_VISIBLE_DEVICES"]=settings.device_id
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = settings.device_id
 import sys
 import argparse
 import csv
@@ -14,7 +15,7 @@ import numpy as np
 import time
 import torch
 from torch import nn
-import  torch.nn.functional as F
+import torch.nn.functional as F
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.data import DataLoader
@@ -26,23 +27,21 @@ logger = settings.logger
 torch.cuda.manual_seed_all(66)
 torch.manual_seed(66)
 
-from datasets import RegDB_triplet_dataset, RegDB_eval_datasets, Image_dataset,RegDB_wrapper
+from datasets import RegDB_triplet_dataset, RegDB_eval_datasets, Image_dataset, RegDB_wrapper
 import itertools
 import solver
-from models import IdClassifier, FeatureEmbedder, Base_rgb,Base_ir
+from models import IdClassifier, FeatureEmbedder, Base_rgb, Base_ir
 from eval import test, evaluate
-
-
 
 from IPython import embed
 
 best_rank1 = 0
 
 
-
 def ensure_dir(dir_path):
     if not os.path.isdir(dir_path):
         os.makedirs(dir_path)
+
 
 class Session:
     def __init__(self):
@@ -54,9 +53,9 @@ class Session:
         logger.info('set model dir as %s' % settings.model_dir)
 
         ##################################### Import models ###########################
-        self.feature_rgb_generator = Base_rgb(last_stride=1,model_path=settings.pretrained_model_path)
-        self.feature_ir_generator = Base_ir(last_stride=1,model_path=settings.pretrained_model_path)
-        self.feature_embedder = FeatureEmbedder(last_stride=1,model_path=settings.pretrained_model_path)
+        self.feature_rgb_generator = Base_rgb(last_stride=1, model_path=settings.pretrained_model_path)
+        self.feature_ir_generator = Base_ir(last_stride=1, model_path=settings.pretrained_model_path)
+        self.feature_embedder = FeatureEmbedder(last_stride=1, model_path=settings.pretrained_model_path)
         self.id_classifier = IdClassifier()
 
         if torch.cuda.is_available():
@@ -74,7 +73,8 @@ class Session:
         ############################# Get Losses & Optimizers #########################
         self.criterion_at = expATLoss()
         self.loss1 = torch.nn.MSELoss()
-        self.criterion_identity = CrossEntropyLabelSmoothLoss(settings.num_classes, epsilon=0.1) #torch.nn.CrossEntropyLoss()
+        self.criterion_identity = CrossEntropyLabelSmoothLoss(settings.num_classes,
+                                                              epsilon=0.1)  # torch.nn.CrossEntropyLoss()
 
         opt_models = [self.feature_rgb_generator,
                       self.feature_ir_generator,
@@ -95,7 +95,6 @@ class Session:
                         weight_decay = settings.WEIGHT_DECAY_BIAS
                     train_params += [{"params": [value], "lr": lr, "weight_decay": weight_decay}]
 
-
             optimizer = torch.optim.Adam(train_params)
             return optimizer
 
@@ -108,23 +107,22 @@ class Session:
         self.writers = {}
         self.dataloaders = {}
 
-        self.sche_G = solver.WarmupMultiStepLR(self.optimizer_G, milestones=settings.iter_sche, gamma=0.1) # default setting s
+        self.sche_G = solver.WarmupMultiStepLR(self.optimizer_G, milestones=settings.iter_sche,
+                                               gamma=0.1)  # default setting s
 
     def tensorboard(self, name):
         self.writers[name] = SummaryWriter(os.path.join(self.log_dir, name + '.events'))
         return self.writers[name]
 
-
     def write(self, name, out):
         for k, v in out.items():
             self.writers[name].add_scalar(name + '/' + k, v, self.step)
-
 
         out['G_lr'] = self.optimizer_G.param_groups[0]['lr']
         out['step'] = self.step
         out['eooch_count'] = self.epoch_count
         outputs = [
-            "{}:{:.4g}".format(k, v) 
+            "{}:{:.4g}".format(k, v)
             for k, v in out.items()
         ]
         logger.info(name + '--' + ' '.join(outputs))
@@ -146,7 +144,7 @@ class Session:
         ckp_path = os.path.join(self.model_dir, name)
         try:
             obj = torch.load(ckp_path)
-            print('load checkpoint: %s' %ckp_path)
+            print('load checkpoint: %s' % ckp_path)
         except FileNotFoundError:
             return
         self.feature_rgb_generator.load_state_dict(obj['feature_rgb_generator'])
@@ -158,7 +156,6 @@ class Session:
         self.epoch_count = obj['epoch_count']
         self.sche_G.last_epoch = self.step
 
-
     def load_checkpoints_delf_init(self, name):
         ckp_path = os.path.join(self.model_dir, name)
         obj = torch.load(ckp_path)
@@ -167,11 +164,10 @@ class Session:
     def cal_fea(self, x, domain_mode):
         if domain_mode == 'rgb':
             feat = self.feature_rgb_generator(x)
-            return feat,self.feature_embedder(feat)
+            return feat, self.feature_embedder(feat)
         elif domain_mode == 'ir':
             feat = self.feature_ir_generator(x)
-            return feat,self.feature_embedder(feat)
-
+            return feat, self.feature_embedder(feat)
 
     def inf_batch(self, batch):
         alpha = settings.alpha
@@ -223,6 +219,7 @@ class Session:
                                    'identity_loss': identity_loss
                                    })
 
+
 def run_train_val(ckp_name='ckp_latest'):
     sess = Session()
     sess.load_checkpoints(ckp_name)
@@ -232,14 +229,15 @@ def run_train_val(ckp_name='ckp_latest'):
 
     ######################## Get Datasets & Dataloaders ###########################
 
-    train_dataset = RegDB_triplet_dataset(settings.data_folder, settings.transforms_list, trial=2)
-
     def get_train_dataloader():
-        return iter(DataLoader(RegDB_triplet_dataset(data_dir=settings.data_folder, transforms_list=settings.transforms_list), batch_size=settings.train_batch_size, shuffle=True,num_workers=settings.num_workers, drop_last = True))
+        return iter(
+            DataLoader(RegDB_triplet_dataset(data_dir=settings.data_folder, transforms_list=settings.transforms_list),
+                       batch_size=settings.train_batch_size, shuffle=True, num_workers=settings.num_workers,
+                       drop_last=True))
 
     train_dataloader = get_train_dataloader()
 
-    eval_val = RegDB_eval_datasets(settings.data_folder, settings.test_transforms_list, mode = 'val',trial=2)
+    eval_val = RegDB_eval_datasets(settings.data_folder, settings.test_transforms_list, mode='val', trial=2)
 
     transform_test = settings.test_transforms_list
 
@@ -272,25 +270,25 @@ def run_train_val(ckp_name='ckp_latest'):
 
         sess.inf_batch(batch_t)
 
-
-
-        if sess.step % settings.val_step ==0:
+        if sess.step % settings.val_step == 0:
             sess.feature_rgb_generator.eval()
             sess.feature_ir_generator.eval()
             sess.feature_embedder.eval()
             sess.id_classifier.eval()
-            test_ranks, test_mAP = test([nn.Sequential(sess.feature_rgb_generator, sess.feature_embedder), nn.Sequential(sess.feature_ir_generator, sess.feature_embedder)], val_queryloader, val_galleryloader)
+            _, test_ranks, test_mAP = test([nn.Sequential(sess.feature_rgb_generator, sess.feature_embedder),
+                                            nn.Sequential(sess.feature_ir_generator, sess.feature_embedder)],
+                                           val_queryloader, val_galleryloader)
             global best_rank1
             if best_rank1 < test_ranks[0] * 100.0:
                 best_rank1 = test_ranks[0] * 100.0
                 sess.save_checkpoints('ckp_latest')
                 sess.save_checkpoints('ckp_latest_backup')
-            sess.write('val_stats', {'test_mAP_percentage': test_mAP*100.0, \
-                                     'test_rank-1_accuracy_percentage':test_ranks[0]*100.0,\
-                                     'test_rank-5_accuracy_percentage':test_ranks[4]*100.0,\
-                                     'test_rank-10_accuracy_percentage':test_ranks[9]*100.0,\
-                                     'test_rank-20_accuracy_percentage':test_ranks[19]*100.0
-            })
+            sess.write('val_stats', {'test_mAP_percentage': test_mAP * 100.0, \
+                                     'test_rank-1_accuracy_percentage': test_ranks[0] * 100.0, \
+                                     'test_rank-5_accuracy_percentage': test_ranks[4] * 100.0, \
+                                     'test_rank-10_accuracy_percentage': test_ranks[9] * 100.0, \
+                                     'test_rank-20_accuracy_percentage': test_ranks[19] * 100.0
+                                     })
 
         if sess.step % sess.save_steps == 0:
             sess.save_checkpoints('ckp_step_%d' % sess.step)
@@ -320,14 +318,14 @@ def test_ckp(ckp_name, setting):
     sess = Session()
     sess.load_checkpoints(ckp_name)
 
-    search_mode = setting.split('_')[0] # 'all' or 'indoor'
-    search_setting = setting.split('_')[1] # 'single' or 'multi'
+    search_mode = setting.split('_')[0]  # 'all' or 'indoor'
+    search_setting = setting.split('_')[1]  # 'single' or 'multi'
 
     transform_test = settings.test_transforms_list
 
     results_ranks = np.zeros(50)
     results_map = np.zeros(1)
-    
+
     for i in range(settings.test_times):
         eval_test = RegDB_eval_datasets(settings.data_folder, settings.test_transforms_list, trial=10)
 
@@ -343,7 +341,9 @@ def test_ckp(ckp_name, setting):
             drop_last=False,
         )
 
-        distmat,test_ranks, test_mAP = test([nn.Sequential(sess.feature_rgb_generator, sess.feature_embedder), nn.Sequential(sess.feature_ir_generator, sess.feature_embedder)], test_queryloader, test_galleryloader)
+        distmat, test_ranks, test_mAP = test([nn.Sequential(sess.feature_rgb_generator, sess.feature_embedder),
+                                              nn.Sequential(sess.feature_ir_generator, sess.feature_embedder)],
+                                             test_queryloader, test_galleryloader)
         embed()
         results_ranks += test_ranks
         results_map += test_mAP
@@ -351,24 +351,32 @@ def test_ckp(ckp_name, setting):
         logger.info('Test no.{} for model {} in setting {}, Test mAP: {}, R1: {}, R5: {}, R10: {}, R20: {}'.format(i,
                                                                                                                    ckp_name,
                                                                                                                    setting,
-                                                                                                                   test_mAP*100.0,
-                                                                                                                   test_ranks[0]*100.0,
-                                                                                                                   test_ranks[4]*100.0,
-                                                                                                                   test_ranks[9]*100.0,
-                                                                                                                   test_ranks[19]*100.0))
-        
+                                                                                                                   test_mAP * 100.0,
+                                                                                                                   test_ranks[
+                                                                                                                       0] * 100.0,
+                                                                                                                   test_ranks[
+                                                                                                                       4] * 100.0,
+                                                                                                                   test_ranks[
+                                                                                                                       9] * 100.0,
+                                                                                                                   test_ranks[
+                                                                                                                       19] * 100.0))
 
     test_mAP = results_map / settings.test_times
     test_ranks = results_ranks / settings.test_times
     logger.info('For model {} in setting {}, AVG test mAP: {}, R1: {}, R5: {}, R10: {}, R20: {}'.format(ckp_name,
                                                                                                         setting,
-                                                                                                        test_mAP*100.0,
-                                                                                                        test_ranks[0]*100.0,
-                                                                                                        test_ranks[4]*100.0,
-                                                                                                        test_ranks[9]*100.0,
-                                                                                                        test_ranks[19]*100.0))
+                                                                                                        test_mAP * 100.0,
+                                                                                                        test_ranks[
+                                                                                                            0] * 100.0,
+                                                                                                        test_ranks[
+                                                                                                            4] * 100.0,
+                                                                                                        test_ranks[
+                                                                                                            9] * 100.0,
+                                                                                                        test_ranks[
+                                                                                                            19] * 100.0))
 
-    return [ckp_name, test_mAP*100.0, test_ranks[0]*100.0, test_ranks[4]*100.0, test_ranks[9]*100.0, test_ranks[19]*100.0]
+    return [ckp_name, test_mAP * 100.0, test_ranks[0] * 100.0, test_ranks[4] * 100.0, test_ranks[9] * 100.0,
+            test_ranks[19] * 100.0]
 
 
 if __name__ == '__main__':
@@ -382,4 +390,3 @@ if __name__ == '__main__':
         run_train_val(args.model)
     elif args.action == 'test':
         run_test(args.model, args.setting)
-

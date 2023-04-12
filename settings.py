@@ -13,11 +13,11 @@ iter_sche = [10000, 20000, 30000]
 train_batch_size = 8
 val_batch_size = 16
 
-log_dir = '../logdir'
-show_dir = '../showdir'
-model_dir = '../models'
-data_folder = '/home/ggw/HaoShao/dataset/RegDB'
-pretrained_model_path = '/home/ggw/.cache/torch/checkpoints/resnet50-19c8e357.pth'
+log_dir = './run/logdir'
+show_dir = './run/showdir'
+model_dir = './run/models'
+data_folder = '/home/datasets/reid/RegDB'
+pretrained_model_path = '/home/lintao/.cache/torch/hub/checkpoints/resnet50-19c8e357.pth'
 
 model_path = os.path.join(model_dir, 'latest')
 save_steps = 5000
