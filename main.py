@@ -26,14 +26,14 @@ import torchvision.transforms as transforms
 logger = settings.logger
 torch.cuda.manual_seed_all(66)
 torch.manual_seed(66)
-
-from datasets import RegDB_triplet_dataset, RegDB_eval_datasets, Image_dataset, RegDB_wrapper
+if settings.RegDB:
+    from datasets import RegDB_triplet_dataset, RegDB_eval_datasets, RegDB_wrapper
+else:
+    from datasets import SYSU_triplet_dataset, SYSU_eval_datasets, Image_dataset
 import itertools
 import solver
 from models import IdClassifier, FeatureEmbedder, Base_rgb, Base_ir
 from eval import test, evaluate
-
-from IPython import embed
 
 best_rank1 = 0
 
@@ -230,28 +230,51 @@ def run_train_val(ckp_name='ckp_latest'):
     ######################## Get Datasets & Dataloaders ###########################
 
     def get_train_dataloader():
-        return iter(
-            DataLoader(RegDB_triplet_dataset(data_dir=settings.data_folder, transforms_list=settings.transforms_list),
-                       batch_size=settings.train_batch_size, shuffle=True, num_workers=settings.num_workers,
-                       drop_last=True))
+        if settings.RegDB:
+            return iter(
+                DataLoader(
+                    RegDB_triplet_dataset(data_dir=settings.data_folder, transforms_list=settings.transforms_list),
+                    batch_size=settings.train_batch_size, shuffle=True, num_workers=settings.num_workers,
+                    drop_last=True))
+        else:
+            return iter(
+                DataLoader(
+                    SYSU_triplet_dataset(data_folder=settings.data_folder, transforms_list=settings.transforms_list),
+                    batch_size=settings.train_batch_size, shuffle=True, num_workers=settings.num_workers,
+                    drop_last=True))
 
     train_dataloader = get_train_dataloader()
 
-    eval_val = RegDB_eval_datasets(settings.data_folder, settings.test_transforms_list, mode='val', trial=2)
-
     transform_test = settings.test_transforms_list
+    if settings.RegDB:
+        eval_val = RegDB_eval_datasets(settings.data_folder, settings.test_transforms_list, mode='val', trial=2)
 
-    val_queryloader = DataLoader(
-        RegDB_wrapper(eval_val.query, transform=transform_test),
-        batch_size=settings.val_batch_size, shuffle=False, num_workers=0,
-        drop_last=False,
-    )
+        val_queryloader = DataLoader(
+            RegDB_wrapper(eval_val.query, transform=transform_test),
+            batch_size=settings.val_batch_size, shuffle=False, num_workers=0,
+            drop_last=False,
+        )
 
-    val_galleryloader = DataLoader(
-        RegDB_wrapper(eval_val.gallery, transform=transform_test),
-        batch_size=settings.val_batch_size, shuffle=False, num_workers=0,
-        drop_last=False,
-    )
+        val_galleryloader = DataLoader(
+            RegDB_wrapper(eval_val.gallery, transform=transform_test),
+            batch_size=settings.val_batch_size, shuffle=False, num_workers=0,
+            drop_last=False,
+        )
+
+    else:
+        eval_val = SYSU_eval_datasets(data_folder=settings.data_folder, data_split='val')
+
+        val_queryloader = DataLoader(
+            Image_dataset(eval_val.query, transform=transform_test),
+            batch_size=settings.val_batch_size, shuffle=False, num_workers=0,
+            drop_last=False,
+        )
+
+        val_galleryloader = DataLoader(
+            Image_dataset(eval_val.gallery, transform=transform_test),
+            batch_size=settings.val_batch_size, shuffle=False, num_workers=0,
+            drop_last=False,
+        )
 
     while sess.step < settings.iter_sche[-1]:
         sess.sche_G.step()
@@ -327,24 +350,38 @@ def test_ckp(ckp_name, setting):
     results_map = np.zeros(1)
 
     for i in range(settings.test_times):
-        eval_test = RegDB_eval_datasets(settings.data_folder, settings.test_transforms_list, trial=10)
+        if settings.RegDB:
+            eval_test = RegDB_eval_datasets(settings.data_folder, settings.test_transforms_list, trial=10)
+            test_queryloader = DataLoader(
+                RegDB_wrapper(eval_test.query, transform=transform_test),
+                batch_size=settings.val_batch_size, shuffle=False, num_workers=0,
+                drop_last=False,
+            )
 
-        test_queryloader = DataLoader(
-            RegDB_wrapper(eval_test.query, transform=transform_test),
-            batch_size=settings.val_batch_size, shuffle=False, num_workers=0,
-            drop_last=False,
-        )
+            test_galleryloader = DataLoader(
+                RegDB_wrapper(eval_test.gallery, transform=transform_test),
+                batch_size=settings.val_batch_size, shuffle=False, num_workers=0,
+                drop_last=False,
+            )
+        else:
+            eval_test = SYSU_eval_datasets(data_folder=settings.data_folder, data_split='test', search_mode=search_mode,
+                                           search_setting=search_setting, use_random=True)
 
-        test_galleryloader = DataLoader(
-            RegDB_wrapper(eval_test.gallery, transform=transform_test),
-            batch_size=settings.val_batch_size, shuffle=False, num_workers=0,
-            drop_last=False,
-        )
+            test_queryloader = DataLoader(
+                Image_dataset(eval_test.query, transform=transform_test),
+                batch_size=settings.val_batch_size, shuffle=False, num_workers=0,
+                drop_last=False,
+            )
+
+            test_galleryloader = DataLoader(
+                Image_dataset(eval_test.gallery, transform=transform_test),
+                batch_size=settings.val_batch_size, shuffle=False, num_workers=0,
+                drop_last=False,
+            )
 
         distmat, test_ranks, test_mAP = test([nn.Sequential(sess.feature_rgb_generator, sess.feature_embedder),
                                               nn.Sequential(sess.feature_ir_generator, sess.feature_embedder)],
                                              test_queryloader, test_galleryloader)
-        embed()
         results_ranks += test_ranks
         results_map += test_mAP
 
@@ -381,7 +418,7 @@ def test_ckp(ckp_name, setting):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-a', '--action', default='train')
+    parser.add_argument('-a', '--action', default='test')
     parser.add_argument('-m', '--model', default='ckp_latest')
     parser.add_argument('-s', '--setting', default='all_single')
     args = parser.parse_args(sys.argv[1:])

@@ -13,10 +13,11 @@ iter_sche = [10000, 20000, 30000]
 train_batch_size = 8
 val_batch_size = 16
 
-log_dir = './run/logdir'
-show_dir = './run/showdir'
-model_dir = './run/models'
-data_folder = '/home/datasets/reid/RegDB'
+log_dir = './run/sysu_logdir'
+show_dir = './run/sysu_showdir'
+model_dir = './run/sysu'
+RegDB = False
+data_folder = '/home/datasets/reid/SYSU-MM01'
 pretrained_model_path = '/home/lintao/.cache/torch/hub/checkpoints/resnet50-19c8e357.pth'
 
 model_path = os.path.join(model_dir, 'latest')
